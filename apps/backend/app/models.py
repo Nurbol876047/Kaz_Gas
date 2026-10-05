@@ -50,6 +50,7 @@ class Role(str, enum.Enum):
 class FileType(str, enum.Enum):
     METER_PHOTO = "METER_PHOTO"
     GAS_LEAK_PHOTO = "GAS_LEAK_PHOTO"
+    METER_READING_PHOTO = "METER_READING_PHOTO"
     OTHER = "OTHER"
 
 
@@ -157,6 +158,7 @@ class AdminSession(Base):
 
 class Application(Timestamps, Base):
     __tablename__ = "applications"
+    subscriber_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -289,6 +291,12 @@ class ApplicationFile(Base):
     storage_url: Mapped[str] = mapped_column(
         String(100),
         unique=True,
+    )
+
+    # SHA-256 of the normalized image bytes; lets callers detect the same photo being resubmitted.
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        index=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(

@@ -2429,3 +2429,13 @@ tbody tr:hover {
   position: relative;
   max-width: 100%;
 }
+.subscriber-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+.panel > .subscriber-toolbar { padding: 16px; }
+.subscriber-search { display: flex; flex: 1; gap: 8px; min-width: 240px; }
+.subscriber-search input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #d9e1e8; border-radius: 8px; }

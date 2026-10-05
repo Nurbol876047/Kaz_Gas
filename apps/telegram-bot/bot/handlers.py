@@ -6,7 +6,7 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from bot.keyboards import CONTROLS, LOCATION, MAIN, date_keyboard, inline
+from bot.keyboards import ACCOUNT_HELP, CONTROLS, LOCATION, MAIN, date_keyboard, inline
 from bot.services import Backend
 from bot.states import BACK, STATUS_LABELS, TYPE_LABELS, Flow
 
@@ -32,19 +32,36 @@ async def prompt(message: Message, state: FSMContext, backend: Backend, timezone
     account = data.get("personal_account", "")
     markup = CONTROLS
     if current == Flow.WAITING_ACCOUNT.state:
-        text = "Дербес шотты қайта енгізіңіз:"
+        text = "Дербес шотты енгізіңіз:"
+    elif current == Flow.ACCOUNT_NOT_FOUND.state:
+        text = ("Дербес шот табылмады. Нөмірді тексеріп, қайта енгізіңіз.\n"
+                "Қауіпті жағдай туралы хабарлау үшін «Авариялық өтінім» батырмасын басыңыз.")
+        markup = ACCOUNT_HELP
     elif current == Flow.CONFIRM_ACCOUNT.state:
-        text = f"Сіз енгізген дербес шот:\n\n{account}\n\nДеректер дұрыс па?"
+        verified = await backend.account(data["telegram_user_id"], account)
+        if not verified.get("verified"):
+            await state.set_state(Flow.WAITING_ACCOUNT)
+            await message.answer("Шотқа қолжетімділікті қайта растаңыз. /start басыңыз.", reply_markup=CONTROLS)
+            return
+        resident = verified["account"]
+        text = (f"✅ Шот расталды\nДербес шот: {account}\nЕсептегіш: {resident['meter_number']}\n"
+                f"Аты-жөні: {resident['full_name']}\nМекенжай: {resident['address']}\n\nБұл сіздің шотыңыз ба?")
         markup = inline([[("✅ Дұрыс", "account:yes"), ("✏️ Өзгерту", "account:edit")]])
     elif current == Flow.SELECT_APPLICATION_TYPE.state:
         text = "Өтінім түрін таңдаңыз:"
         markup = inline(
             [
+                [("📊 Газ көрсеткішін жіберу", "reading:start")],
                 [("🔧 Счетчик жұмыс жасамайды", "type:METER_NOT_WORKING")],
                 [("📅 МПИ-ге шешу", "type:MPI_REMOVAL")],
                 [("⚠️ Есептеу құралынан газ шығуы", "type:GAS_LEAK")],
             ]
         )
+    elif current == Flow.READING_PHOTO.state:
+        text = "Есептегіштің көрсеткіші анық көрінетін фотосын жіберіңіз."
+    elif current == Flow.READING_CONFIRM.state:
+        text = f"Дербес шот: {account}\nКезең: {data['reading_period'][:7]}\nФото: ✅\n\nТексеруге жіберейік пе?"
+        markup = inline([[("✅ Жіберу", "reading:submit"), ("✏️ Қайта түсіру", "reading:edit")]])
     elif current in {Flow.METER_WAITING_PHOTO.state, Flow.GAS_WAITING_METER_PHOTO.state}:
         text = "Есептеу құралының фотосын жіберіңіз."
     elif current == Flow.GAS_WAITING_LEAK_PHOTO.state:
@@ -80,11 +97,13 @@ async def prompt(message: Message, state: FSMContext, backend: Backend, timezone
 async def start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(Flow.WAITING_ACCOUNT)
-    await state.update_data(idempotency_key=str(uuid.uuid4()))
-    await message.answer(
-        "Қош келдіңіз!\nӨтінім қалдыру үшін дербес шотыңызды енгізіңіз.\n\nДербес шотты енгізіңіз:",
+    await state.update_data(idempotency_key=str(uuid.uuid4()), telegram_user_id=message.from_user.id)
+    sent = await message.answer(
+        "Қош келдіңіз!\nДербес шотыңызды енгізіңіз.\n"
+        f"Telegram ID: {message.from_user.id}",
         reply_markup=CONTROLS,
     )
+    await state.update_data(active_message_id=sent.message_id)
 
 
 async def cancel(message, state):
@@ -175,14 +194,51 @@ async def list_page(callback: CallbackQuery, backend: Backend):
         await show_applications(callback.message, backend, callback.from_user.id, int(page))
 
 
-@router.message(Flow.WAITING_ACCOUNT, F.text)
+@router.message(Flow.WAITING_ACCOUNT, F.text, ~F.text.startswith("/"), F.text != "📊 Менің көрсеткіштерім")
 async def account(message: Message, state: FSMContext, backend: Backend, timezone: str):
     value = message.text.strip()
     if not re.fullmatch(r"[0-9]{6,20}", value):
-        await message.answer("Дербес шот 6–20 цифрдан тұруы керек. Қайта енгізіңіз:", reply_markup=CONTROLS)
+        await message.answer("Дербес шот 6–20 цифрдан тұруы керек. Қайта енгізіңіз:")
         return
-    await state.update_data(personal_account=value)
-    await state.set_state(Flow.CONFIRM_ACCOUNT)
+    await state.update_data(lookup_identifier=value, telegram_user_id=message.from_user.id)
+    result = await backend.account(message.from_user.id, value)
+    if result.get("verified"):
+        await state.update_data(personal_account=result["account"]["account_number"], account_id=result["account"]["id"])
+        await state.set_state(Flow.CONFIRM_ACCOUNT)
+    else:
+        await state.set_state(Flow.ACCOUNT_NOT_FOUND)
+    await prompt(message, state, backend, timezone)
+
+
+@router.message(Flow.ACCOUNT_NOT_FOUND, F.text == "⚠️ Авариялық өтінім")
+async def unverified_emergency(message: Message, state: FSMContext, backend: Backend, timezone: str):
+    data = await state.get_data()
+    await state.update_data(personal_account=data["lookup_identifier"], application_type="GAS_LEAK")
+    await state.set_state(Flow.GAS_WAITING_METER_PHOTO)
+    await message.answer("⚠️ Қауіп төніп тұрса, авариялық газ қызметіне дереу хабарласыңыз. "
+                         "Өтінім расталмаған шотпен қабылданады.", reply_markup=CONTROLS)
+    await prompt(message, state, backend, timezone)
+
+
+@router.message(Command("readings"))
+@router.message(F.text == "📊 Менің көрсеткіштерім")
+async def my_readings(message: Message, backend: Backend):
+    result = await backend.readings(message.from_user.id)
+    labels = {"PENDING": "Тексерілуде", "ACCEPTED": "Қабылданды", "REJECTED": "Қабылданбады"}
+    blocks = [f"Шот: {item['account_number']} · {item['period'][:7]}\n"
+              + (f"{item['value']} м³" if item['value'] is not None else "Фото тексерілуде")
+              + f" · {labels[item['status']]}"
+              + (f"\nШығын: {item['consumption']} м³" if item['consumption'] is not None else "")
+              + (f"\n{item['review_note']}" if item.get('review_note') else "") for item in result["items"]]
+    await message.answer("\n\n".join(blocks) if blocks else "Әзірге көрсеткіштер жоқ.")
+
+
+@router.message(Flow.READING_PHOTO, F.photo)
+async def reading_photo(message: Message, state: FSMContext, backend: Backend, timezone: str):
+    image = message.photo[-1]
+    file = await backend.upload(message.bot, message.from_user.id, image, "METER_READING_PHOTO")
+    await state.update_data(reading_photo_id=file["id"], reading_period=today(timezone).replace(day=1).isoformat())
+    await state.set_state(Flow.READING_CONFIRM)
     await prompt(message, state, backend, timezone)
 
 
@@ -246,6 +302,10 @@ async def callback(callback: CallbackQuery, state: FSMContext, backend: Backend,
         await callback.answer("Бұл батырма ескірген. Соңғы хабарламаны пайдаланыңыз.")
         return
     await callback.answer()
+    if "telegram_user_id" not in data:
+        await state.clear()
+        await callback.message.answer("Жүйе жаңартылды. Шотыңызды растау үшін /start басыңыз.", reply_markup=MAIN)
+        return
     action = callback.data
     if action == "noop":
         return
@@ -255,6 +315,27 @@ async def callback(callback: CallbackQuery, state: FSMContext, backend: Backend,
     if action == "back":
         await go_back(callback.message, state, backend, timezone)
         return
+    if current == Flow.SELECT_APPLICATION_TYPE.state and action == "reading:start":
+        verified = await backend.account(callback.from_user.id, data["personal_account"])
+        if not verified.get("verified"):
+            await state.set_state(Flow.WAITING_ACCOUNT)
+        else:
+            await state.update_data(account_id=verified["account"]["id"], idempotency_key=str(uuid.uuid4()))
+            await state.set_state(Flow.READING_PHOTO)
+        await prompt(callback.message, state, backend, timezone)
+        return
+    if current == Flow.READING_CONFIRM.state and action in {"reading:submit", "reading:edit"}:
+        if action == "reading:edit":
+            await state.set_state(Flow.READING_PHOTO)
+            await prompt(callback.message, state, backend, timezone)
+            return
+        await backend.reading({"account_id": data["account_id"], "telegram_user_id": callback.from_user.id,
+                               "idempotency_key": data["idempotency_key"], "photo_id": data["reading_photo_id"],
+                               "period": data["reading_period"]})
+        await state.clear()
+        await callback.message.answer("✅ Көрсеткіштің фотосы тексеруге жіберілді.\n"
+                                      "Күйін «Менің көрсеткіштерім» бөлімінен көре аласыз.", reply_markup=MAIN)
+        return
     if current == Flow.CONFIRM_ACCOUNT.state and action in {"account:yes", "account:edit"}:
         await state.set_state(Flow.SELECT_APPLICATION_TYPE if action == "account:yes" else Flow.WAITING_ACCOUNT)
     elif current == Flow.SELECT_APPLICATION_TYPE.state and action.startswith("type:"):
@@ -262,7 +343,8 @@ async def callback(callback: CallbackQuery, state: FSMContext, backend: Backend,
         if kind not in TYPE_LABELS:
             return
         # Switching type clears incompatible fields but preserves the confirmed account and idempotency key.
-        await state.set_data({k: data[k] for k in ["personal_account", "idempotency_key"]})
+        await state.set_data({k: data[k] for k in ["personal_account", "idempotency_key", "telegram_user_id", "account_id"]
+                              if k in data})
         await state.update_data(application_type=kind)
         if kind == "GAS_LEAK":
             warning = "⚠️ Газ иісі қатты сезілсе немесе қауіп төніп тұрса, авариялық газ қызметіне дереу хабарласыңыз."
@@ -353,12 +435,15 @@ async def fallback(message: Message, state: FSMContext):
         Flow.METER_WAITING_PHOTO.state,
         Flow.GAS_WAITING_METER_PHOTO.state,
         Flow.GAS_WAITING_LEAK_PHOTO.state,
+        Flow.READING_PHOTO.state,
     }:
         await message.answer(
             "Фотосуретті «Фото» ретінде жіберіңіз. Құжат немесе мәтін қабылданбайды.", reply_markup=CONTROLS
         )
     elif current in {Flow.METER_WAITING_LOCATION.state, Flow.GAS_WAITING_LOCATION.state}:
         await message.answer("📍 Геолокацияны жіберу батырмасын басыңыз.", reply_markup=LOCATION)
+    elif current == Flow.ACCOUNT_NOT_FOUND.state:
+        await message.answer("Дербес шот нөмірін қайта енгізу үшін ⬅️ Артқа батырмасын басыңыз.", reply_markup=ACCOUNT_HELP)
     elif current:
         await message.answer("Соңғы хабарламадағы батырманы пайдаланыңыз. ⬅️ Артқа немесе ❌ Бас тарту қолжетімді.")
     else:

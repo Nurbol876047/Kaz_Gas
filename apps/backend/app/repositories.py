@@ -228,7 +228,7 @@ async def application_dict(
             for f in files
         ]
 
-        result["subscriber_verified"] = False
+        result["subscriber_verified"] = application.subscriber_verified
 
     return result
 

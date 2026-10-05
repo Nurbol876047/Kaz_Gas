@@ -24,6 +24,7 @@ async def main():
             [
                 BotCommand(command="start", description="Өтінім қалдыру"),
                 BotCommand(command="applications", description="Менің өтінімдерім"),
+                BotCommand(command="readings", description="Менің көрсеткіштерім"),
                 BotCommand(command="contact", description="Байланыс"),
                 BotCommand(command="menu", description="Басты мәзір"),
                 BotCommand(command="cancel", description="Бас тарту"),

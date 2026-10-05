@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import uuid
@@ -35,7 +36,8 @@ def normalize_image(raw: bytes) -> bytes:
         raise HTTPException(422, "Жарамды JPEG, PNG немесе WebP фотосын жіберіңіз") from exc
 
 
-async def save_photo(upload: UploadFile, max_bytes: int) -> str:
+async def save_photo(upload: UploadFile, max_bytes: int) -> tuple[str, str]:
+    """Returns (storage key, sha256 of the normalized bytes) so callers can spot resubmitted photos."""
     if upload.content_type not in {"image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(415, "Тек JPEG, PNG, WebP")
     raw = await upload.read(max_bytes + 1)
@@ -53,7 +55,7 @@ async def save_photo(upload: UploadFile, max_bytes: int) -> str:
             os.fsync(file.fileno())
 
     await run_in_threadpool(write)
-    return key
+    return key, hashlib.sha256(normalized).hexdigest()
 
 
 def storage_path(key: str) -> Path:

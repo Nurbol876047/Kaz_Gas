@@ -6,11 +6,18 @@ MAIN = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📝 Өтінім қалдыру")],
         [KeyboardButton(text="📋 Менің өтінімдерім"), KeyboardButton(text="☎️ Байланыс")],
+        [KeyboardButton(text="📊 Менің көрсеткіштерім")],
     ],
     resize_keyboard=True,
 )
 CONTROLS = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="⬅️ Артқа"), KeyboardButton(text="❌ Бас тарту")]], resize_keyboard=True
+)
+ACCOUNT_HELP = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="⚠️ Авариялық өтінім")],
+        [KeyboardButton(text="⬅️ Артқа"), KeyboardButton(text="❌ Бас тарту")],
+    ], resize_keyboard=True, one_time_keyboard=True,
 )
 LOCATION = ReplyKeyboardMarkup(
     keyboard=[

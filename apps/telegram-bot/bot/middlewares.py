@@ -23,10 +23,11 @@ class Guard(BaseMiddleware):
             return
         try:
             return await handler(event, data)
-        except (APIError, TelegramAPIError):
+        except (APIError, TelegramAPIError) as exc:
             logging.getLogger("bot").warning("Bot request failed; FSM preserved")
             message = event.message if isinstance(event, CallbackQuery) else event
             if isinstance(message, Message):
                 await message.answer(
+                    "⚠️ " + str(exc) if isinstance(exc, APIError) else
                     "⚠️ Сұраныс орындалмады. Деректеріңіз сақталды. Қайта көріңіз немесе /start басыңыз."
                 )

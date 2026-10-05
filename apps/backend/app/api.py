@@ -747,9 +747,10 @@ async def upload_photo(
     if file_type == FileType.OTHER:
         raise HTTPException(422, "Unsupported photo purpose")
     config = await settings_row(db)
-    key = await save_photo(photo, min(config.max_photo_mb * 1024 * 1024, get_settings().max_photo_bytes))
+    key, content_hash = await save_photo(photo, min(config.max_photo_mb * 1024 * 1024, get_settings().max_photo_bytes))
     row = ApplicationFile(
-        owner_telegram_id=telegram_user_id, telegram_file_id=telegram_file_id, file_type=file_type, storage_url=key
+        owner_telegram_id=telegram_user_id, telegram_file_id=telegram_file_id, file_type=file_type,
+        storage_url=key, content_hash=content_hash,
     )
     db.add(row)
     try:

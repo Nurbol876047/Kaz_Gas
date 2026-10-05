@@ -8,12 +8,16 @@ from app.models import Application, Outbox
 from app.repositories import get_application
 from app.schemas import CreateApplication, StatusUpdate, local_today
 from app.services import change_status, create_application
+from app.subscriber_models import SubscriberAccount
 
 
 async def test_postgres_concurrent_submission_is_idempotent(db):
     if db.bind.dialect.name != "postgresql":
         pytest.skip("Requires PostgreSQL row locks")
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    db.add(SubscriberAccount(account_number="987654321", meter_number="RACE-1", full_name="Synthetic resident",
+                             address="Test address", telegram_user_id=321987))
+    await db.commit()
     payload = CreateApplication(
         user={"telegram_user_id": 321987, "first_name": "Concurrent"},
         idempotency_key=uuid4(),
@@ -34,6 +38,9 @@ async def test_postgres_concurrent_submission_is_idempotent(db):
 async def test_postgres_concurrent_status_has_one_winner(db, admin):
     if db.bind.dialect.name != "postgresql":
         pytest.skip("Requires PostgreSQL row locks")
+    db.add(SubscriberAccount(account_number="987654321", meter_number="RACE-2", full_name="Synthetic resident",
+                             address="Test address", telegram_user_id=321988))
+    await db.commit()
     payload = CreateApplication(
         user={"telegram_user_id": 321988, "first_name": "Concurrent"},
         idempotency_key=uuid4(),

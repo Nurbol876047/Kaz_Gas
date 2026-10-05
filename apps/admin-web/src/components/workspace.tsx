@@ -26,6 +26,7 @@ import { Dashboard } from "./dashboard";
 import { ApplicationDetail } from "./application-detail";
 import { Reports } from "./reports";
 import { Staff } from "./staff";
+import { Subscribers } from "./subscribers";
 import { Settings } from "./settings";
 import { Empty, Loading } from "./common";
 const links = [
@@ -33,6 +34,7 @@ const links = [
   { href: "/applications", label: "Өтінімдер", icon: ClipboardList },
   { href: "/emergencies", label: "Авариялық өтінімдер", icon: CircleAlert },
   { href: "/staff", label: "Қызметкерлер", icon: UsersRound },
+  { href: "/subscribers", label: "Абоненттер", icon: UsersRound },
   { href: "/reports", label: "Есептер", icon: FileChartColumn },
   { href: "/settings", label: "Баптаулар", icon: Settings2 },
 ];
@@ -136,7 +138,7 @@ export function Workspace() {
         </div>
         <span className="nav-heading">НЕГІЗГІ МӘЗІР</span>
         <nav>
-          {links.map(({ href, label, icon: Icon }) => (
+          {links.filter((link) => link.href !== "/subscribers" || admin.role === "SUPER_ADMIN").map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
@@ -295,6 +297,8 @@ export function Workspace() {
             <Reports revision={revision} />
           ) : path === "/staff" ? (
             <Staff revision={revision} />
+          ) : path === "/subscribers" ? (
+            <Subscribers revision={revision} />
           ) : path === "/settings" ? (
             <Settings revision={revision} />
           ) : (

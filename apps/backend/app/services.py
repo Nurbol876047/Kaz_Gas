@@ -29,6 +29,7 @@ from app.models import (
     User,
 )
 from app.schemas import CreateApplication
+from app.subscriber_models import SubscriberAccount
 
 
 TRANSITIONS = {
@@ -102,6 +103,13 @@ async def create_application(
     db,
     data: CreateApplication,
 ):
+    subscriber = await db.scalar(select(SubscriberAccount).where(
+        SubscriberAccount.account_number == data.personal_account,
+        SubscriberAccount.telegram_user_id == data.user.telegram_user_id,
+        SubscriberAccount.active.is_(True),
+    ).with_for_update())
+    if subscriber is None and data.application_type != ApplicationType.GAS_LEAK:
+        raise HTTPException(403, "Дербес шот расталмаған. /start арқылы қайта кіріңіз.")
     user = await db.scalar(
         select(User)
         .where(
@@ -210,6 +218,7 @@ async def create_application(
         files.append(file)
 
     application = Application(
+        subscriber_verified=subscriber is not None,
         user_id=user.id,
         idempotency_key=str(
             data.idempotency_key

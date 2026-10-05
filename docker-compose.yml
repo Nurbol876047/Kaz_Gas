@@ -9,6 +9,7 @@ x-backend-env: &backend-env
   COOKIE_SECURE: ${COOKIE_SECURE:-true}
   UPLOAD_DIR: /data/uploads
   TIMEZONE: Asia/Qyzylorda
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
 services:
   postgres:

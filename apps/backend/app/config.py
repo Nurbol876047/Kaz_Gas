@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     max_photo_bytes: int = 10 * 1024 * 1024
     session_hours: int = 8
     timezone: str = "Asia/Qyzylorda"
+    gemini_api_key: str = ""
 
     @property
     def origins(self) -> list[str]:

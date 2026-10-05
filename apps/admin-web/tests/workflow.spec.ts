@@ -24,13 +24,28 @@ test("login, real application, realtime, status, reports, settings and responsiv
   ).toBeVisible();
   await expect(page.getByText("Тікелей", { exact: true })).toBeVisible();
   const resident = Math.floor(Date.now() / 1000);
+  const personalAccount = String(resident) + "01";
+  const auth = await (await page.request.get("/api/auth/me")).json();
+  const registryHeaders = { "X-CSRF-Token": auth.csrf_token, Origin: new URL(page.url()).origin };
+  const registered = await page.request.post("/api/subscribers", {
+    headers: registryHeaders,
+    data: { account_number: personalAccount, meter_number: `E2E-${resident}`, full_name: "E2E resident",
+      address: "Synthetic test address", phone: null },
+  });
+  expect(registered.ok(), await registered.text()).toBeTruthy();
+  const subscriber = await registered.json();
+  const bound = await page.request.post(`/api/subscribers/${subscriber.id}/binding`, {
+    headers: registryHeaders,
+    data: { telegram_user_id: resident, version: subscriber.version, reason: "Synthetic E2E verification" },
+  });
+  expect(bound.ok(), await bound.text()).toBeTruthy();
   const date = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const created = await request.post(`${apiURL}/internal/applications`, {
     headers: { "X-Bot-Key": botKey },
     data: {
       user: { telegram_user_id: resident, first_name: "E2E resident" },
       idempotency_key: randomUUID(),
-      personal_account: "123456789",
+      personal_account: personalAccount,
       application_type: "MPI_REMOVAL",
       requested_date: date,
     },
@@ -48,7 +63,7 @@ test("login, real application, realtime, status, reports, settings and responsiv
     }),
   ).toBeVisible();
   await page
-    .getByLabel("Жаңа мәртебе", { exact: true })
+    .getByRole("combobox", { name: "Жаңа мәртебе" })
     .selectOption("IN_PROGRESS");
   await page.getByRole("button", { name: "Мәртебені өзгерту" }).click();
   await expect(page.locator(".detail-badges")).toContainText("Өңделуде");
@@ -56,7 +71,7 @@ test("login, real application, realtime, status, reports, settings and responsiv
   await page.getByRole("button", { name: "Қосу", exact: true }).click();
   await expect(page.locator(".timeline")).toContainText("E2E internal comment");
   await page
-    .getByLabel("Жаңа мәртебе", { exact: true })
+    .getByRole("combobox", { name: "Жаңа мәртебе" })
     .selectOption("COMPLETED");
   await page.getByRole("button", { name: "Мәртебені өзгерту" }).click();
   await expect(page.locator(".detail-badges")).toContainText("Аяқталды");

@@ -24,6 +24,13 @@ class Backend:
     async def request(self, method, path, **kwargs):
         try:
             response = await self.client.request(method, path.lstrip("/"), **kwargs)
+            if response.status_code in {403, 409, 422, 429}:
+                try:
+                    detail = response.json().get("detail")
+                except ValueError:
+                    detail = None
+                if isinstance(detail, str):
+                    raise APIError(detail)
             response.raise_for_status()
             return response.json()
         except (httpx.HTTPError, ValueError) as exc:
@@ -31,6 +38,17 @@ class Backend:
 
     async def settings(self):
         return await self.request("GET", "settings")
+
+    async def account(self, user_id, identifier, kind="account"):
+        return await self.request("POST", "subscribers/lookup", json={
+            "telegram_user_id": user_id, "identifier": identifier, "kind": kind,
+        })
+
+    async def reading(self, payload):
+        return await self.request("POST", "subscribers/readings", json=payload)
+
+    async def readings(self, user_id):
+        return await self.request("GET", f"subscribers/{user_id}/readings")
 
     async def upload(self, bot, telegram_user_id, photo, file_type):
         config = await self.settings()

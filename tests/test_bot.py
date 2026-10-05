@@ -50,6 +50,10 @@ class Harness:
         self.session = TelegramSession()
         self.bot = Bot("123456:TEST_FAKE_TOKEN_NEVER_CONNECT", session=self.session)
         self.api = AsyncMock()
+        async def account_lookup(user_id, identifier, kind="account"):
+            return {"verified": True, "account": {"id": 1, "account_number": identifier, "meter_number": "TEST-1",
+                     "full_name": "Test resident", "address": "Test address"}}
+        self.api.account.side_effect = account_lookup
         self.api.settings.return_value = {"emergency_phone": "", "max_photo_mb": 10}
         self.api.upload.side_effect = [
             {"id": "11111111-1111-4111-8111-111111111111"},
@@ -190,3 +194,54 @@ def test_date_and_bounded_download():
     buffer = BoundedBuffer(3)
     with pytest.raises(APIError):
         buffer.write(b"1234")
+
+
+async def test_unknown_account_shows_not_found_and_offers_emergency(h):
+    h.api.account.side_effect = None
+    h.api.account.return_value = {"verified": False}
+    await h.message("/start", entities=[{"type": "bot_command", "offset": 0, "length": 6}])
+    await h.message("12345678")
+    assert await h.context.get_state() == Flow.ACCOUNT_NOT_FOUND.state
+    assert "табылмады" in h.session.messages[-1].text
+    assert all("Test resident" not in message.text for message in h.session.messages)
+
+
+async def test_known_account_shows_resident_immediately(h):
+    verified = {"verified": True, "account": {"id": 2, "account_number": "00123456", "meter_number": "M-123",
+                "full_name": "Verified Resident", "address": "Verified address"}}
+    h.api.account.side_effect = None
+    h.api.account.return_value = verified
+    await h.message("/start", entities=[{"type": "bot_command", "offset": 0, "length": 6}])
+    await h.message("00123456")
+    h.api.account.assert_awaited_with(123456, "00123456")
+    assert await h.context.get_state() == Flow.CONFIRM_ACCOUNT.state
+    assert (await h.context.get_data())["personal_account"] == "00123456"
+    assert "Verified Resident" in h.session.messages[-1].text
+    assert "Verified address" in h.session.messages[-1].text
+
+
+async def test_reading_flow_requires_photo_and_confirms(h):
+    h.api.reading.return_value = {"id": "reading-1"}
+    await h.message("/start", entities=[{"type": "bot_command", "offset": 0, "length": 6}])
+    await h.message("12345678")
+    await h.click("account:yes")
+    await h.click("reading:start")
+    await h.message("123.125")
+    assert await h.context.get_state() == Flow.READING_PHOTO.state
+    h.api.reading.assert_not_awaited()
+    await h.message(photo=[PhotoSize(file_id="reading", file_unique_id="reading-photo", width=20, height=20)])
+    assert await h.context.get_state() == Flow.READING_CONFIRM.state
+    await h.click("reading:submit")
+    assert h.api.reading.call_args.args[0]["photo_id"] == "11111111-1111-4111-8111-111111111111"
+    assert h.api.reading.call_args.args[0]["telegram_user_id"] == 123456
+    assert await h.context.get_state() is None
+
+
+async def test_unfound_account_emergency_still_available(h):
+    h.api.account.side_effect = None
+    h.api.account.return_value = {"verified": False}
+    await h.message("/start", entities=[{"type": "bot_command", "offset": 0, "length": 6}])
+    await h.message("12345678")
+    await h.message("⚠️ Авариялық өтінім")
+    assert await h.context.get_state() == Flow.GAS_WAITING_METER_PHOTO.state
+    assert (await h.context.get_data())["application_type"] == "GAS_LEAK"

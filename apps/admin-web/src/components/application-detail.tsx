@@ -120,7 +120,9 @@ export function ApplicationDetail({
                 <dt>Дербес шот</dt>
                 <dd className="mono">{a.personal_account}</dd>
                 <small>
-                  Форматы тексерілген · абонент базасымен расталмаған
+                  {a.subscriber_verified
+                    ? "Өтінім жіберілген кезде абонент реестрімен расталған"
+                    : "Шот иесі абонент реестрімен расталмаған"}
                 </small>
               </div>
               <div>

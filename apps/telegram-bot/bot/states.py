@@ -3,6 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class Flow(StatesGroup):
     WAITING_ACCOUNT = State()
+    ACCOUNT_NOT_FOUND = State()
     CONFIRM_ACCOUNT = State()
     SELECT_APPLICATION_TYPE = State()
     METER_WAITING_PHOTO = State()
@@ -14,9 +15,14 @@ class Flow(StatesGroup):
     GAS_WAITING_LEAK_PHOTO = State()
     GAS_WAITING_LOCATION = State()
     GAS_CONFIRM = State()
+    READING_PHOTO = State()
+    READING_CONFIRM = State()
 
 
 BACK = {
+    Flow.ACCOUNT_NOT_FOUND.state: Flow.WAITING_ACCOUNT,
+    Flow.READING_PHOTO.state: Flow.SELECT_APPLICATION_TYPE,
+    Flow.READING_CONFIRM.state: Flow.READING_PHOTO,
     Flow.CONFIRM_ACCOUNT.state: Flow.WAITING_ACCOUNT,
     Flow.SELECT_APPLICATION_TYPE.state: Flow.CONFIRM_ACCOUNT,
     Flow.METER_WAITING_PHOTO.state: Flow.SELECT_APPLICATION_TYPE,

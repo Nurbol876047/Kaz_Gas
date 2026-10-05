@@ -15,6 +15,7 @@ from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Admin, Role, SystemSettings  # noqa: E402
 from app.auth import password_hasher  # noqa: E402
+from app.subscriber_models import SubscriberAccount  # noqa: E402
 
 
 @pytest.fixture
@@ -30,6 +31,8 @@ async def db():
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
         session.add(SystemSettings(id=1))
+        session.add(SubscriberAccount(account_number="12345678", meter_number="TEST-METER-1", full_name="Test resident",
+                                      address="Test address", telegram_user_id=123456))
         await session.commit()
         yield session
     async with engine.begin() as connection:
@@ -58,6 +61,7 @@ async def client(db, monkeypatch):
     app.dependency_overrides[get_db] = override
     monkeypatch.setattr("app.auth.rate_limit", AsyncMock())
     monkeypatch.setattr("app.api.rate_limit", AsyncMock())
+    monkeypatch.setattr("app.subscribers.rate_limit", AsyncMock())
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", headers={"Origin": "http://test"}
     ) as client:
