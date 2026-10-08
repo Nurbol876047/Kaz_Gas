@@ -8,8 +8,11 @@
 #  - If you rename the "kazak-gas-app" service or add a custom domain, update
 #    ALLOWED_ORIGINS below to match the real public URL, or the backend will
 #    reject browser requests (CORS).
-#  - Create the first SUPER_ADMIN with a one-off Shell command on the service:
-#    cd /srv/backend && python -m app.cli --email admin@example.kz --name "Admin"
+#  - The free plan has no Shell, so the first SUPER_ADMIN is created
+#    automatically on container start from ADMIN_EMAIL/ADMIN_PASSWORD (see
+#    app/bootstrap_admin.py). Fill those two in once, redeploy, log in, then
+#    clear ADMIN_PASSWORD's value in the dashboard - it's only read once and
+#    there's no reason to leave a plaintext admin password sitting in env vars.
 #
 # Free plans: the web service spins down after 15 min idle (cold start on the
 # next request), the free Postgres is deleted after 30 days, free Key Value
@@ -64,4 +67,8 @@ services:
       - key: COOKIE_SECURE
         value: "true"
       - key: GEMINI_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
         sync: false
