@@ -1,0 +1,67 @@
+# Render Blueprint: one web service runs frontend + backend + Telegram bot +
+# notification worker together (see docker/render.Dockerfile). Postgres and
+# Redis stay as separate managed Render resources.
+#
+# After the first deploy:
+#  - Fill in BOT_TOKEN (and GEMINI_API_KEY if you use it) in the service's
+#    Environment tab - they're intentionally left blank below (sync: false).
+#  - If you rename the "kazak-gas-app" service or add a custom domain, update
+#    ALLOWED_ORIGINS below to match the real public URL, or the backend will
+#    reject browser requests (CORS).
+#  - Create the first SUPER_ADMIN with a one-off Shell command on the service:
+#    cd /srv/backend && python -m app.cli --email admin@example.kz --name "Admin"
+#
+# Free plans: the web service spins down after 15 min idle (cold start on the
+# next request), the free Postgres is deleted after 30 days, free Key Value
+# similarly expires. Fine for testing; switch plans in the dashboard for real use.
+#
+# Free-plan web services can't attach a persistent disk, so uploaded meter
+# photos live on the container's ephemeral filesystem and are lost on every
+# deploy/restart while on "free". Once you move the web service to a paid
+# plan, uncomment the "disk:" block below so /data/uploads survives restarts.
+
+databases:
+  - name: kazak-gas-db
+    plan: free
+    databaseName: utility
+    user: utility
+
+services:
+  - name: kazak-gas-redis
+    type: keyvalue
+    plan: free
+    ipAllowList: []
+
+  - name: kazak-gas-app
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./docker/render.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health/ready
+    # disk:
+    #   name: uploads
+    #   mountPath: /data/uploads
+    #   sizeGB: 5
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kazak-gas-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: kazak-gas-redis
+          type: keyvalue
+          property: connectionString
+      - key: BOT_API_KEY
+        generateValue: true
+      - key: BOT_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://kazak-gas-app.onrender.com
+      - key: ENVIRONMENT
+        value: production
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false

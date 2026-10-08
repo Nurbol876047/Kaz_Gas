@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,17 @@ class Settings(BaseSettings):
     session_hours: int = 8
     timezone: str = "Asia/Qyzylorda"
     gemini_api_key: str = ""
+
+    @field_validator("database_url")
+    @classmethod
+    def use_asyncpg_driver(cls, value: str) -> str:
+        # Managed Postgres providers (Render, etc.) hand out plain postgres://
+        # or postgresql:// URLs; the async engine requires the asyncpg driver.
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value[len("postgres://"):]
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value[len("postgresql://"):]
+        return value
 
     @property
     def origins(self) -> list[str]:
